@@ -1,60 +1,95 @@
-
 .header {
-    background-color: #333;
-    box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
+  background-color: #333;
+  box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
 }
 .banner {
-    height: 170px;
-    width: 100%;
-    background-position: center; /* Center the image */
-    background-repeat: no-repeat; /* Do not repeat the image */
-    background-size: cover; /* Resize the background image to cover the entire container */
-    box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
+  height: 170px;
+  width: 100%;
+  background-position: center; /* Center the image */
+  background-repeat: no-repeat; /* Do not repeat the image */
+  background-size: cover; /* Resize the background image to cover the entire container */
+  box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
 }
 
 .collInfo {
-    display: flex;
-    margin-top: -83.5px;
-    align-items: flex-end;
+  display: flex;
+  margin-top: -83.5px;
+  align-items: flex-end;
 }
 
-
 .icon {
-    height: 167px;
-    width: 167px;
-    margin-left: 50px;
+  height: 167px;
+  width: 167px;
+  margin-left: 50px;
 }
 
 .collName {
-    margin-left: 25px;
-    margin-top: 5px;
-    font-family: 'Inter';
-    font-style: normal;
-    font-weight: 400;
-    font-size: 30px;
-    line-height: 36px;
+  margin-left: 25px;
+  margin-top: 5px;
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-size: 30px;
+  line-height: 36px;
 
-    color: #FFFFFF;
+  color: #ffffff;
 }
 
 .snipe {
-    border-bottom: solid 2px #7ED957;
-    width: 180px;
-    margin-left: 50px;
+  border-bottom: solid 2px #7ed957;
+  width: 180px;
+  margin-left: 50px;
 }
 
 .snipeTitle {
-    margin-bottom: 5px;
-    font-family: 'Inter';
-    font-style: normal;
-    font-weight: 400;
-    font-size: 16px;
-    line-height: 19px;
+  margin-bottom: 5px;
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 19px;
 }
 
 .snipeParams {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin: 10px 50px 0px 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 50px 0px 50px;
+}
+
+.showTokens {
+  display: flex;
+  align-items: center;
+  justify-content: left;
+  flex-wrap: wrap;
+  margin: 10px 50px;
+}
+
+.tokenStats {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  margin: 10px 50px;
+}
+
+.token {
+  padding: 10px;
+  margin: 10px;
+  border: 1px #4d4d4d solid;
+  border-radius: 5px;
+}
+
+.token:hover {
+  border-color: #7ed957;
+}
+
+.tokenInfo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 5px 10px;
+}
+
+.tokenHide {
+  display: none;
 }
