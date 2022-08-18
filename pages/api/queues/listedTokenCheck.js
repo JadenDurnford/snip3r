@@ -3,6 +3,7 @@ import axios from "axios";
 import tokenListedNotif from "./tokenListed";
 import { Client } from "pg";
 import EpnsSDK from "@epnsproject/backend-sdk-staging";
+import { ethers } from "ethers";
 
 export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   const client = new Client({
@@ -23,9 +24,29 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   const contractAddress = notifData.contract;
   const id = `${walletAddress}` + ":" + `${contractAddress}`;
   const data = JSON.parse(notifData.data);
-  const attdata = JSON.parse(notifData.attdata);
   const traitsSelected = JSON.parse(notifData.traits);
+  const rarityMin = notifData.raritymin;
+  const rarityMax = notifData.raritymax;
   const specificid = notifData.idvalue;
+  const chain = notifData.chain;
+  var reservoirUrl;
+  var alchemyUrl;
+  if (chain == "Ethereum") {
+    reservoirUrl = "api.reservoir.tools";
+    alchemyUrl = `https://eth.alchemyapi.io/v2/${process.env.ALCHEMY_MAINNET}`;
+  } else if (chain == "Rinkeby") {
+    reservoirUrl = "api-rinkeby.reservoir.tools";
+    alchemyUrl = `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_TESTNET}`;
+  }
+
+  const {
+    data: { attributes },
+  } = await axios.get(
+    `https://${reservoirUrl}/collections/${contractAddress}/attributes/static/v1`,
+    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
+  );
+  const attdata = attributes;
+
   const pushNotificationtitle = `Your snipe on ${data.name} was created`;
   const pushNotificationMessage = `Your snipe with parameters: 
   Max Price= ${notifData.price}
@@ -40,7 +61,10 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   Traits Selected=${Object.entries(traitsSelected).map((trait) => {
     return " " + trait[0] + ": " + trait[1];
   })}`;
-  const image = `${data.metadata.imageUrl}`;
+  var image = `${data.metadata.imageUrl}`;
+  if (image == null) {
+    image = "";
+  }
 
   const tx = await epnsSdk.sendNotification(
     notifData.address,
@@ -56,11 +80,12 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
 
   console.log(tx);
 
+  /*
   var tokens;
 
   if (specificid != "") {
     var specifictoken = await axios.get(
-      `https://api.reservoir.tools/tokens/v4?tokens=${contractAddress}%3A${specificid}`
+      `https://${reservoirUrl}/tokens/v4?tokens=${contractAddress}%3A${specificid}`
     );
     tokens = specifictoken.data.tokens;
   } else {
@@ -108,7 +133,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
 
   const tokenList = tokens.map((token) => {
     return token.tokenId;
-  });
+  }); */
 
   const unixTime = Date.now() / 1000;
 
@@ -123,23 +148,19 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
     const {
       data: { events },
     } = await axios.get(
-      `https://api.reservoir.tools/events/tokens/floor-ask/v2?contract=${contractAddress}&startTimestamp=${unixTime}&sortDirection=desc&limit=50`,
+      `https://${reservoirUrl}/events/tokens/floor-ask/v2?contract=${contractAddress}&startTimestamp=${unixTime}&sortDirection=desc&limit=50`,
       {
         headers: {
-          "x-api-key": "30e494ac-228f-48d7-8f5a-9202a2e7fc26",
+          "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}`,
         },
       }
     );
 
-    var orderIds = events.map((listing) => {
+    const orderIds = events.map((listing) => {
       return listing.token.tokenId;
     });
 
-    const matchingTokens = orderIds.filter((element) =>
-      tokenList.includes(element)
-    );
-
-    var uniqueTokens = [...new Set(matchingTokens)];
+    var uniqueTokens = [...new Set(orderIds)];
     var fulfilledIds = await client.query(
       `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
     );
@@ -158,6 +179,45 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
       return idArray.indexOf(id) < 0;
     });
 
+    if (Object.keys(traitsSelected).length != 0) {
+      var allTokens = uniqueTokens;
+      var allTraitTokens = [];
+      for (const [key, value] of Object.entries(traitsSelected)) {
+        allTraitTokens = [];
+        var keyIndex = attdata.findIndex((element) => element.key == key);
+        var valueIndex = attdata[keyIndex].values.findIndex(
+          (element) => element.value == value
+        );
+        var traitTokens = attdata[keyIndex].values[valueIndex].tokens;
+        traitTokens.map((traittoken) => {
+          allTokens.map((token) => {
+            if (token == traittoken) {
+              allTraitTokens.push(token);
+            }
+          });
+        });
+        allTokens = allTraitTokens;
+      }
+      uniqueTokens = allTokens;
+    }
+
+    if (rarityMin != null && rarityMax != null) {
+      var tokenString = "";
+      uniqueTokens.forEach((token) => {
+        tokenString += `&tokens=${contractAddress}%3A${token}`;
+      });
+      const { tokens } = await axios.get(
+        `https://${reservoirUrl}/tokens/v4?sortBy=floorAskPrice&limit=50&includeTopBid=false${tokenString}`
+      );
+      uniqueTokens = [];
+      tokens.forEach((token) => {
+        if (token.rarityRank <= rarityMax && token.rarityRank >= rarityMin) {
+          uniqueTokens.push(token.tokenId);
+        }
+      });
+    }
+    console.log(uniqueTokens);
+
     if (uniqueTokens.length != 0) {
       for (var i = 0; i < uniqueTokens.length; i++) {
         if (
@@ -165,61 +225,77 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
             notifData.price &&
           events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price != null
         ) {
-          var {
-            data: { tokens },
-          } = await axios.get(
-            `https://api.reservoir.tools/tokens/v4?tokens=${contractAddress}%3A${uniqueTokens[i]}`
+          console.log(`Token #${uniqueTokens[i]} matches query`);
+          /* const connection = new ethers.providers.JsonRpcProvider(
+            `${alchemyUrl}`
           );
-          var tokenPkg = tokens[0];
-          tokenPkg.address = notifData.address;
-          tokenPkg.price =
-            events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price;
-          await tokenListedNotif.enqueue(tokenPkg);
 
-          var filledIds = await client.query(
-            `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
-          );
-          var newIds;
-          if (filledIds.rows[0].fulfilled_ids != null) {
-            newIds = filledIds.rows[0].fulfilled_ids.concat(
-              ",",
-              uniqueTokens[i]
+          const wallet = new ethers.Wallet(process.env.SNIPE_PK);
+          const signer = wallet.connect(connection);
+          try {
+            const {
+              data: { steps },
+            } = await axios.get(
+              `https://${reservoirUrl}/execute/buy/v2?token=${contractAddress}%3A${uniqueTokens[i]}&taker=${walletAddress}&onlyQuote=false&referrer=0xFf14BA529d203823F4B6d4a7F23c1568333AE60b&referrerFeeBps=250&source=reservoir.market&partial=false&skipBalanceCheck=true`
             );
-          } else {
-            newIds = uniqueTokens[i];
-          }
+            var tx = steps[0].data;
+            tx["from"] = `${wallet.address}`;
+            try {
+              const transaction = await signer.sendTransaction(tx);
+              console.log(transaction);
+              const success = await transaction.wait(6);
+              console.log(success);
 
-          await client.query(
-            `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
-          );
+              var {
+                data: { tokens },
+              } = await axios.get(
+                `https://${reservoirUrl}/tokens/v4?tokens=${contractAddress}%3A${uniqueTokens[i]}`
+              );
+              var tokenPkg = tokens[0];
+              tokenPkg.address = notifData.address;
+              tokenPkg.price =
+                events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price;
+              await tokenListedNotif.enqueue(tokenPkg);
 
-          var quant = await client.query(
-            `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
-          );
-          var count = quant.rows[0].quantity + 1;
-          await client.query(
-            `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
-          );
-          if (count >= parseInt(notifData.quantity)) {
-            console.log("adequate snipes fulfilled, terminating process");
-            client.end();
-            taskDelete();
-            return resolve;
-          }
+              var filledIds = await client.query(
+                `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
+              );
+              var newIds;
+              if (filledIds.rows[0].fulfilled_ids != null) {
+                newIds = filledIds.rows[0].fulfilled_ids.concat(
+                  ",",
+                  uniqueTokens[i]
+                );
+              } else {
+                newIds = uniqueTokens[i];
+              }
+              await client.query(
+                `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
+              );
+              var quant = await client.query(
+                `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
+              );
+              var count = quant.rows[0].quantity + 1;
+              await client.query(
+                `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
+              );
+              if (count >= parseInt(notifData.quantity)) {
+                console.log("adequate snipes fulfilled, terminating process");
+                client.end();
+                taskDelete();
+                return resolve;
+              }
+            } catch (error) {
+              console.log(error);
+            }
+          } catch (err) {
+            console.log("no data");
+          } */
         }
       }
     }
-
-    setTimeout(apiPoll, 5000, resolve, reject);
+    setTimeout(apiPoll, 1000, resolve, reject);
   };
 
   return new Promise(apiPoll);
 });
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "4mb",
-    },
-  },
-};

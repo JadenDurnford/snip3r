@@ -3,17 +3,21 @@ import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useNetwork } from "wagmi";
 
 export default function Layout(props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [results, setResults] = useState([]);
+  const { chain } = useNetwork();
 
   const getResults = async () => {
     if (!name) {
       setResults([]);
     } else {
-      const { data } = await axios.get(`/api/search?name=${name}`);
+      const { data } = await axios.get(
+        `/api/search?name=${name}&chain=${chain.name}`
+      );
       setResults([...data]);
     }
   };
@@ -25,12 +29,13 @@ export default function Layout(props) {
   return (
     <div>
       <div className={styles.header}>
-        <a href="/">
-          <div>
-            <img src="/icon.svg" className={styles.icon} />
+        <a href="/" className={styles.icon}>
+          <div className={styles.linkbox}>
+            <img src="/smallicon.svg" />
+            <div className={styles.icontext}>snip3r</div>
           </div>
         </a>
-        <div>
+        <div className={styles.searchbarbox}>
           <input
             type="text"
             placeholder="Search..."
@@ -45,7 +50,11 @@ export default function Layout(props) {
                   <button
                     onClick={() => {
                       setName("");
-                      router.push(`/collection/${result.collectionId}`);
+                      router.push({
+                        pathname: `/collection/${result.collectionId}`,
+                        query: { chain: chain.name },
+                      }),
+                        `/collection/${result.collectionId}`;
                     }}
                   >
                     <img src={result.image} />
@@ -56,7 +65,16 @@ export default function Layout(props) {
             </div>
           )}
         </div>
-        <ConnectButton />
+        <ConnectButton
+          chainStatus={{
+            smallScreen: "none",
+            largeScreen: "icon",
+          }}
+          accountStatus={{
+            smallScreen: "avatar",
+            largeScreen: "full",
+          }}
+        />
       </div>
       <div>{props.children}</div>
     </div>

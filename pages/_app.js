@@ -1,14 +1,22 @@
 import "../styles/globals.css";
 import NextNProgress from "nextjs-progressbar";
 import "@rainbow-me/rainbowkit/styles.css";
-import { getDefaultWallets, RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import {
+  getDefaultWallets,
+  RainbowKitProvider,
+  darkTheme,
+} from "@rainbow-me/rainbowkit";
 import { chain, configureChains, createClient, WagmiConfig } from "wagmi";
 import { alchemyProvider } from "wagmi/providers/alchemy";
 import { publicProvider } from "wagmi/providers/public";
+import Head from "next/head";
 
 const { chains, provider } = configureChains(
-  [chain.mainnet],
-  [alchemyProvider({ alchemyId: process.env.ALCHEMY_ID }), publicProvider()]
+  [chain.mainnet, chain.rinkeby],
+  [
+    alchemyProvider({ alchemyId: process.env.ALCHEMY_MAINNET }),
+    publicProvider(),
+  ]
 );
 const { connectors } = getDefaultWallets({
   appName: "My RainbowKit App",
@@ -22,17 +30,25 @@ const wagmiClient = createClient({
 
 function MyApp({ Component, pageProps }) {
   return (
-    <WagmiConfig client={wagmiClient}>
-      <RainbowKitProvider chains={chains}>
-        <NextNProgress
-          color="#7ED957"
-          startPosition={0.3}
-          showOnShallow={true}
-          options={{ showSpinner: false }}
-        />
-        <Component {...pageProps} />
-      </RainbowKitProvider>
-    </WagmiConfig>
+    <>
+      <Head>
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+      <WagmiConfig client={wagmiClient}>
+        <RainbowKitProvider
+          chains={chains}
+          theme={darkTheme({ overlayBlur: "small" })}
+        >
+          <NextNProgress
+            color="#7ED957"
+            startPosition={0.3}
+            showOnShallow={true}
+            options={{ showSpinner: false }}
+          />
+          <Component {...pageProps} />
+        </RainbowKitProvider>
+      </WagmiConfig>
+    </>
   );
 }
 

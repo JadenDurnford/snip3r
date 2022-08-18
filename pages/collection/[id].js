@@ -3,165 +3,80 @@ import Layout from "../../components/Layout";
 import NftCard from "../../components/NftCard";
 import styles from "../../styles/Id.module.css";
 import { useState, useEffect } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useNetwork, useEnsName } from "wagmi";
+import { ethers } from "ethers";
+import InfiniteScroll from "react-infinite-scroll-component";
+import Router from "next/router";
 
-async function collectCollection(contractAddress) {
+async function collectCollection(contractAddress, baseUrl) {
   const {
     data: { collection },
   } = await axios.get(
-    `https://api.reservoir.tools/collection/v2?id=${contractAddress}`,
+    `https://${baseUrl}/collection/v3?id=${contractAddress}&includeTopBid=false`,
     { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
   );
   if (!collection) throw new Error("Could not collect collection data");
   return collection;
 }
 
-async function collectCollectionAtts(contractAddress) {
+async function collectCollectionAttributes(contractAddress, baseUrl) {
   const {
     data: { attributes },
   } = await axios.get(
-    `https://api.reservoir.tools/collections/${contractAddress}/attributes/static/v1`,
+    `https://${baseUrl}/collections/${contractAddress}/attributes/static/v1`,
     { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
   );
   if (!attributes) throw new Error("Could not collect attribute data");
   return attributes;
 }
 
-async function collectCollectionTokens(contractAddress) {
-  console.log("started token collection...");
-  const t0 = performance.now();
-
-  let form = document.getElementById("snipeForm");
-  let elements = form.elements;
-  for (let i = 0; i < elements.length; i++) {
-    elements[i].disabled = true;
-  }
-
-  var { data: tokenList } = await axios.get(
-    `http://localhost:8080/https://api.reservoir.tools/tokens/v4?collection=${contractAddress}&sortBy=tokenId&limit=50`,
+async function collectCollectionTokens(contractAddress, baseUrl) {
+  const { data } = await axios.get(
+    `https://${baseUrl}/tokens/v4?collection=${contractAddress}&sortBy=tokenId&limit=50`,
     { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
   );
-  while (tokenList.continuation != null) {
-    var { data: tokenNext } = await axios.get(
-      `http://localhost:8080/https://api.reservoir.tools/tokens/v4?collection=${contractAddress}&sortBy=tokenId&limit=50&continuation=${encodeURI(
-        tokenList.continuation
+
+  if (!data) throw new Error("Could not collect first 50 tokens");
+
+  data.tokens.map((object) => {
+    delete object["contract"];
+    delete object["name"];
+    delete object["media"];
+    delete object["collection"];
+    delete object["source"];
+    delete object["topBidValue"];
+    delete object["rarity"];
+    delete object["owner"];
+  });
+
+  return data;
+}
+
+async function collectListedTokens(contractAddress, baseUrl) {
+  var { data } = await axios.get(
+    `https://${baseUrl}/tokens/bootstrap/v1?collection=${contractAddress}&limit=500`,
+    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
+  );
+  if (!data) throw new Error("Could not collect listed tokens");
+  while (data.continuation != null) {
+    var data2 = await axios.get(
+      `https://${baseUrl}/tokens/bootstrap/v1?collection=${contractAddress}&continuation=${encodeURI(
+        data.continuation
       )}`,
       { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
     );
-    tokenList.tokens.push(...tokenNext.tokens);
-    tokenList.continuation = tokenNext.continuation;
+    data.tokens.push(...data2.data.tokens);
+    data.continuation = data2.data.continuation;
   }
 
-  for (let i = 0; i < elements.length; i++) {
-    elements[i].disabled = false;
-  }
-
-  const t1 = performance.now();
-  console.log(`Collecting tokens took ${t1 - t0} milliseconds.`);
-
-  if (!tokenList) throw new Error("Could not collect Tokens");
-  return tokenList.tokens;
+  return data.tokens;
 }
 
-async function collectListedTokens(contractAddress) {
-  const {
-    data: { tokens },
-  } = await axios.get(
-    `https://api.reservoir.tools/tokens/floor/v1?collection=${contractAddress}`,
-    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
-  );
-  if (!tokens) throw new Error("Count not collect listed tokens");
-  const tokenArray = Object.entries(tokens);
-  tokenArray.sort((a, b) => {
-    return a[1] - b[1];
-  });
-  return tokenArray;
-}
-
-const formValidation = async (
-  contractAddress,
-  data,
-  attdata,
-  event,
-  traitsSelected,
-  address,
-  raritymin,
-  raritymax,
-  idvalue,
-  tokencount
-) => {
-  event.preventDefault();
-  var specificid;
-  var rarityMin;
-  var rarityMax;
-  if (tokencount <= 0) {
-    alert("Query does not match any tokens.");
-    return false;
-  }
-  if (address == undefined) {
-    alert("Please connect your wallet");
-    return false;
-  }
-  if (event.target.quantity.value < 1) {
-    alert("Quantity must be greater than 0.");
-    return false;
-  }
-  if (event.target.maxPrice.value <= 0) {
-    alert("Max Price must be greater than 0.");
-    return false;
-  }
-  if (event.target.idCheckbox.checked) {
-    specificid = idvalue;
-  } else {
-    specificid = "";
-  }
-  if (event.target.rarityCheckbox.checked) {
-    rarityMin = raritymin;
-    rarityMax = raritymax;
-  } else {
-    rarityMin = null;
-    rarityMax = null;
-  }
-
-  const epnsData = {
-    price: `${event.target.maxPrice.value}`,
-    quantity: `${event.target.quantity.value}`,
-    contract: `${contractAddress}`,
-    data: JSON.stringify(data),
-    attdata: JSON.stringify(attdata),
-    traits: JSON.stringify(traitsSelected),
-    address: `${address}`,
-    raritymin: `${rarityMin}`,
-    raritymax: `${rarityMax}`,
-    idvalue: `${specificid}`,
-  };
-  const epnsJSONData = JSON.stringify(epnsData);
-  await fetch("/api/snipeInit", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: epnsJSONData,
-  });
-};
-
-async function taskDelete(address, contract) {
-  const id = `${address}` + ":" + `${contract}`;
+async function taskDelete(walletAddress, contractAddress) {
+  const id = `${walletAddress}` + ":" + `${contractAddress}`;
   await fetch("/api/taskDelete", {
     method: "POST",
     body: id,
-  });
-}
-
-async function tokenDataCache(id, tokens) {
-  console.log("adding tokens to DB");
-  const tokenJSON = {
-    id: id,
-    tokens: tokens,
-  };
-  await fetch("/api/tokenStorage", {
-    method: "POST",
-    body: JSON.stringify(tokenJSON),
   });
 }
 
@@ -171,17 +86,14 @@ export default function Collection({
   attdata,
   tokendata,
   listedtokens,
+  baseUrl,
 }) {
   const [rarityBox, setRarityBox] = useState(false);
   const [rarityMin, setRarityMin] = useState(1);
   const [rarityMax, setRarityMax] = useState(data.tokenCount);
   const [traitBox, setTraitBox] = useState(false);
-  const [traitType, setTraitType] = useState(data.attributes[0].key);
-  const [traitValues, setTraitValues] = useState(
-    attdata[
-      attdata.findIndex((element) => element.key == traitType)
-    ].values.map((result) => result.value)
-  );
+  const [traitType, setTraitType] = useState("");
+  const [traitValues, setTraitValues] = useState([]);
   const [traitsSelected, setTraitsSelected] = useState({});
   const [idBox, setIdBox] = useState(false);
   const [idValue, setIdValue] = useState("");
@@ -192,24 +104,154 @@ export default function Collection({
   const [numbListed, setNumbListed] = useState("");
   const [listedTokens, setListedTokens] = useState([]);
   const walletAddress = useAccount().address;
+  const [hasTraits, setHasTraits] = useState(false);
+  const [continuation, setContinuation] = useState("");
+  const [hasMore, setHasMore] = useState(true);
+  const { chain } = useNetwork();
+  const [chainChanged, setChainChanged] = useState(false);
+  const formValidation = async (
+    contractAddress,
+    data,
+    attdata,
+    event,
+    traitsSelected,
+    address,
+    raritymin,
+    raritymax,
+    idvalue
+  ) => {
+    event.preventDefault();
+    var specificid;
+    var rarityMin;
+    var rarityMax;
+    if (address == undefined) {
+      alert("Please connect your wallet");
+      return false;
+    }
+    if (event.target.quantity.value < 1) {
+      alert("Quantity must be greater than 0.");
+      return false;
+    }
+    if (event.target.maxPrice.value <= 0) {
+      alert("Max Price must be greater than 0.");
+      return false;
+    }
+    if (event.target.idCheckbox.checked) {
+      specificid = idvalue;
+    } else {
+      specificid = "";
+    }
+    if (event.target.rarityCheckbox.checked) {
+      rarityMin = raritymin;
+      rarityMax = raritymax;
+    } else {
+      rarityMin = null;
+      rarityMax = null;
+    }
+    /*
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner();
+    const gasPriceWei = await signer.getGasPrice();
+    const gasPriceEth = ethers.utils.formatEther(gasPriceWei * 200000);
+
+    const amount =
+      parseFloat(event.target.quantity.value) *
+      (parseFloat(event.target.maxPrice.value) * 1.05 +
+        parseFloat(gasPriceEth));
+    const bal = await signer.getBalance();
+    if (ethers.utils.formatEther(bal) < amount) {
+      alert("Balance is too low to complete snipe");
+      return false;
+    }
+    const txReq = {
+      from: walletAddress,
+      to: "0x2D0AC7b46Df8ea11F6C2B8554A86197E02254C2a",
+      value: ethers.utils.parseUnits(`${amount}`),
+    };
+    try {
+      const transaction = await signer.sendTransaction(txReq);
+      const success = await transaction.wait(2);
+      console.log(success);
+    } catch (err) {
+      alert(err);
+      return false;
+    } */
+
+    const snipeData = {
+      price: `${event.target.maxPrice.value}`,
+      quantity: `${event.target.quantity.value}`,
+      contract: `${contractAddress}`,
+      data: JSON.stringify(data),
+      traits: JSON.stringify(traitsSelected),
+      address: `${address}`,
+      raritymin: `${rarityMin}`,
+      raritymax: `${rarityMax}`,
+      idvalue: `${specificid}`,
+      chain: `${chain.name}`,
+    };
+    const JSONData = JSON.stringify(snipeData);
+    await fetch("/api/snipeInit", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSONData,
+    });
+  };
 
   useEffect(() => {
-    if (Object.keys(tokendata).length == 0) {
-      console.log("no token data cached");
-      getTokens();
-    } else {
-      var pulledTokens = tokendata;
-      var tempTokens = [];
-      var baseToken = {};
-      listedtokens.map((token) => {
-        baseToken = pulledTokens[parseInt(token[0])];
-        baseToken.floorAskPrice = token[1];
-        tempTokens.push(baseToken);
-      });
-      setListedTokens(tempTokens);
-      setShownTokens(tempTokens);
-      setTokens(pulledTokens);
+    if (chainChanged) {
+      Router.push("/");
     }
+    setChainChanged(true);
+  }, [chain]);
+
+  useEffect(() => {
+    /*
+    async function pgPost() {
+      await fetch(`/api/pgTableCreate?id=${id}`, {
+        method: "POST",
+      });
+      await fetch(`/api/pgTokenAdd?id=${id}`, {
+        method: "POST",
+        body: JSON.stringify(tokendata.tokens),
+      });
+    }
+    pgPost(); */
+    setContinuation(tokendata.continuation ?? "");
+    if (attdata.length == 0) {
+      document.getElementById("rarityCheckbox").disabled = true;
+      document.getElementById("traitCheckbox").disabled = true;
+    } else {
+      setTraitType(data.attributes[0].key);
+      setTraitValues(
+        attdata[
+          attdata.findIndex((element) => element.key == data.attributes[0].key)
+        ].values.map((result) => result.value)
+      );
+      setHasTraits(true);
+    }
+    var pulledTokens = tokendata.tokens;
+    var listed = [];
+    listedtokens.map((token) => {
+      delete Object.assign(token, { ["floorAskPrice"]: token["price"] })[
+        "price"
+      ];
+      delete token["contract"];
+      delete token["orderId"];
+      delete token["maker"];
+      delete token["validFrom"];
+      delete token["validUntil"];
+      delete token["source"];
+      listed.push(token);
+    });
+    setListedTokens(listed);
+    var nonSelectedItems = pulledTokens.filter((obj) =>
+      listed.every((s) => s.tokenId !== obj.tokenId)
+    );
+    var shown = listed.push(...nonSelectedItems);
+    setTokens(nonSelectedItems);
+    setShownTokens(shown);
   }, []);
 
   const removeTrait = (removed) => {
@@ -228,33 +270,30 @@ export default function Collection({
     });
   };
 
-  const getTokens = async () => {
-    setFloorPrice("⏳");
-    setNumbMatching("⏳");
-    setNumbListed("⏳");
-    var pulledTokens = await collectCollectionTokens(id);
-    pulledTokens.forEach((object) => {
-      delete object["contract"];
-      delete object["name"];
-      delete object["media"];
-      delete object["collection"];
-      delete object["source"];
-      delete object["topBidValue"];
-      delete object["rarity"];
-      delete object["owner"];
-      object.floorAskPrice = null;
-    });
-    tokenDataCache(id, JSON.stringify(pulledTokens));
-    var tempTokens = [];
-    var baseToken = {};
-    listedtokens.map((token) => {
-      baseToken = pulledTokens[parseInt(token[0])];
-      baseToken.floorAskPrice = token[1];
-      tempTokens.push(baseToken);
-    });
-    setListedTokens(tempTokens);
-    setShownTokens(tempTokens);
-    setTokens(pulledTokens);
+  const getMoreTokens = async () => {
+    const { data } = await axios.get(
+      `/api/tokenPull?id=${id}&continuation=${continuation}`
+    );
+    if (!data) throw new Error("Could not collect more tokens");
+
+    if (!data.continuation) {
+      setHasMore(false);
+      setContinuation("");
+    } else {
+      setContinuation(data.continuation);
+    }
+    function addUnique(array1, array2) {
+      return array1.filter((object1) => {
+        return !array2.some((object2) => {
+          return object1.tokenId === object2.tokenId;
+        });
+      });
+    }
+    setTokens((token) => [...token, ...addUnique(data.tokens, shownTokens)]);
+    setShownTokens((token) => [
+      ...token,
+      ...addUnique(data.tokens, shownTokens),
+    ]);
   };
 
   useEffect(() => {
@@ -269,13 +308,17 @@ export default function Collection({
       document.getElementById("quantity").disabled = true;
 
       if (idValue != "") {
-        setShownTokens([
-          tokens[tokens.map((object) => object.tokenId).indexOf(idValue)],
-        ]);
+        const getSingleToken = async () => {
+          const { data } = await axios.get(
+            `https://${baseUrl}/tokens/v4?tokens=${id}%3A${idValue}`
+          );
+          setShownTokens(data.tokens);
+        };
+        getSingleToken();
       } else {
         setShownTokens([]);
       }
-    } else if (!idBox) {
+    } else if (!idBox && hasTraits) {
       document.getElementById("rarityCheckbox").disabled = false;
       document.getElementById("traitCheckbox").disabled = false;
       document.getElementById("quantity").value = null;
@@ -285,6 +328,14 @@ export default function Collection({
       setNumbMatching("N/A");
       setNumbListed("N/A");
       setShownTokens(listedTokens);
+    } else {
+      document.getElementById("quantity").value = null;
+      document.getElementById("quantity").disabled = false;
+      setIdValue("");
+      setFloorPrice("N/A");
+      setNumbMatching("N/A");
+      setNumbListed("N/A");
+      setShownTokens([...listedTokens, ...tokens]);
     }
   }, [idBox, idValue]);
 
@@ -332,7 +383,6 @@ export default function Collection({
 
   useEffect(() => {
     if (shownTokens.length != 0) {
-      console.log(shownTokens);
       const listedCount = shownTokens.reduce(
         (acc, cur) => (cur.floorAskPrice != null ? ++acc : acc),
         0
@@ -341,7 +391,7 @@ export default function Collection({
       setNumbMatching(shownTokens.length);
       setNumbListed(listedCount);
     } else if (!idBox && !traitBox && !rarityBox) {
-      setShownTokens(listedTokens);
+      setShownTokens([...listedTokens, ...tokens]);
     } else {
       setFloorPrice("N/A");
       setNumbMatching("N/A");
@@ -387,7 +437,7 @@ export default function Collection({
       setNumbListed("N/A");
     }
   }, [rarityMax, rarityMin, rarityBox, traitBox]);
-
+  /*
   useEffect(() => {
     if (!rarityBox && tokens.length != 0) {
       let nodes = document.getElementById("showTokens");
@@ -406,8 +456,7 @@ export default function Collection({
       setNumbMatching(tokens.length);
       setNumbListed(listedCounter);
     }
-  }, [rarityBox]);
-
+  }, [rarityBox]);*/
   return (
     <Layout>
       <div className={styles.header}>
@@ -438,7 +487,6 @@ export default function Collection({
         id="snipeForm"
         className={styles.snipeParams}
         onSubmit={(event) => {
-          var tokencount = shownTokens.length;
           formValidation(
             id,
             data,
@@ -448,8 +496,7 @@ export default function Collection({
             walletAddress,
             rarityMin,
             rarityMax,
-            idValue,
-            tokencount
+            idValue
           );
         }}
       >
@@ -457,10 +504,16 @@ export default function Collection({
           <p>Max Price</p>{" "}
           <input type="number" placeholder="ETH" step=".0001" id="maxPrice" />
         </div>
-        <div>
+        <div className={styles.raritydisabled}>
+          {!hasTraits && (
+            <span className={styles.raritydisabledtext}>
+              Rarity disabled for this query
+            </span>
+          )}
           <input
             type="checkbox"
             id="rarityCheckbox"
+            className={styles.rarityCheckbox}
             onChange={(e) => setRarityBox(e.target.checked)}
           />
           <label for="rarityCheckbox">Rarity</label>
@@ -489,7 +542,12 @@ export default function Collection({
             </div>
           )}
         </div>
-        <div>
+        <div className={styles.traitsdisabled}>
+          {!hasTraits && (
+            <span className={styles.traitsdisabledtext}>
+              Traits disabled for this query
+            </span>
+          )}
           <input
             type="checkbox"
             id="traitCheckbox"
@@ -610,18 +668,26 @@ export default function Collection({
           <span id="numTokensListed">{numbListed}</span>
         </div>
       </div>
-      <div id="showTokens" className={styles.showTokens}>
+      <InfiniteScroll
+        id="showTokens"
+        className={styles.showTokens}
+        dataLength={shownTokens.length}
+        next={getMoreTokens}
+        hasMore={hasMore}
+        scrollThreshold={0.5}
+      >
         {shownTokens.length != 0 &&
           shownTokens.map((token) => {
             return NftCard(token);
           })}
-      </div>
+      </InfiniteScroll>
     </Layout>
   );
 }
 
 export async function getServerSideProps(context) {
   const { id } = context.query;
+  const chain = context.query.chain;
   if (!id) {
     return {
       redirect: {
@@ -630,16 +696,22 @@ export async function getServerSideProps(context) {
       },
     };
   }
-  const { data: tokens } = await axios.get(
-    `http://localhost:3000/api/tokenPuller?id=${id}`
-  );
+
+  var baseUrl;
+  if (chain == "Ethereum") {
+    baseUrl = process.env.API_BASE_URL;
+  } else if (chain == "Rinkeby") {
+    baseUrl = process.env.API_TEST_URL;
+  }
+
   return {
     props: {
-      id,
-      data: await collectCollection(id),
-      attdata: await collectCollectionAtts(id),
-      tokendata: tokens,
-      listedtokens: await collectListedTokens(id),
+      id: id,
+      data: await collectCollection(id, baseUrl),
+      attdata: await collectCollectionAttributes(id, baseUrl),
+      tokendata: await collectCollectionTokens(id, baseUrl),
+      listedtokens: await collectListedTokens(id, baseUrl),
+      baseUrl: baseUrl,
     },
   };
 }

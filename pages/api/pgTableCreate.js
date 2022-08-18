@@ -14,15 +14,15 @@ export default async (req, res) => {
   });
 
   const { id } = req.query;
-  const tokens = await client.query(
-    `SELECT tokens FROM token_data WHERE id= '${id}'`
+  const exists = await client.query(
+    `SELECT EXISTS (SELECT FROM information_schema."tables" WHERE table_name = '${id}')`
   );
-  if (tokens.rowCount == 1) {
-    client.end();
-    const parsedTokens = JSON.parse(tokens.rows[0].tokens);
-    res.status(200).json(parsedTokens);
-  } else {
-    client.end();
-    res.status(200).json({});
+  if (!exists.rows[0].exists) {
+    await client.query(
+      `CREATE TABLE "${id}" AS SELECT * FROM token_data_sample`
+    );
   }
+
+  client.end();
+  res.status(200).end();
 };
