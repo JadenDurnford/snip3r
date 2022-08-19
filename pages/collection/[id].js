@@ -1,11 +1,9 @@
 import axios from "axios";
 import Layout from "../../components/Layout";
-import NftCard from "../../components/NftCard";
 import styles from "../../styles/Id.module.css";
 import { useState, useEffect } from "react";
-import { useAccount, useNetwork, useEnsName } from "wagmi";
+import { useAccount, useNetwork } from "wagmi";
 import { ethers } from "ethers";
-import InfiniteScroll from "react-infinite-scroll-component";
 import Router from "next/router";
 
 async function collectCollection(contractAddress, baseUrl) {
@@ -30,48 +28,6 @@ async function collectCollectionAttributes(contractAddress, baseUrl) {
   return attributes;
 }
 
-async function collectCollectionTokens(contractAddress, baseUrl) {
-  const { data } = await axios.get(
-    `https://${baseUrl}/tokens/v4?collection=${contractAddress}&sortBy=tokenId&limit=50`,
-    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
-  );
-
-  if (!data) throw new Error("Could not collect first 50 tokens");
-
-  data.tokens.map((object) => {
-    delete object["contract"];
-    delete object["name"];
-    delete object["media"];
-    delete object["collection"];
-    delete object["source"];
-    delete object["topBidValue"];
-    delete object["rarity"];
-    delete object["owner"];
-  });
-
-  return data;
-}
-
-async function collectListedTokens(contractAddress, baseUrl) {
-  var { data } = await axios.get(
-    `https://${baseUrl}/tokens/bootstrap/v1?collection=${contractAddress}&limit=500`,
-    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
-  );
-  if (!data) throw new Error("Could not collect listed tokens");
-  while (data.continuation != null) {
-    var data2 = await axios.get(
-      `https://${baseUrl}/tokens/bootstrap/v1?collection=${contractAddress}&continuation=${encodeURI(
-        data.continuation
-      )}`,
-      { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
-    );
-    data.tokens.push(...data2.data.tokens);
-    data.continuation = data2.data.continuation;
-  }
-
-  return data.tokens;
-}
-
 async function taskDelete(walletAddress, contractAddress) {
   const id = `${walletAddress}` + ":" + `${contractAddress}`;
   await fetch("/api/taskDelete", {
@@ -80,14 +36,7 @@ async function taskDelete(walletAddress, contractAddress) {
   });
 }
 
-export default function Collection({
-  id,
-  data,
-  attdata,
-  tokendata,
-  listedtokens,
-  baseUrl,
-}) {
+export default function Collection({ id, data, attdata }) {
   const [rarityBox, setRarityBox] = useState(false);
   const [rarityMin, setRarityMin] = useState(1);
   const [rarityMax, setRarityMax] = useState(data.tokenCount);
@@ -97,22 +46,14 @@ export default function Collection({
   const [traitsSelected, setTraitsSelected] = useState({});
   const [idBox, setIdBox] = useState(false);
   const [idValue, setIdValue] = useState("");
-  const [tokens, setTokens] = useState([]);
-  const [shownTokens, setShownTokens] = useState([]);
-  const [floorPrice, setFloorPrice] = useState("");
-  const [numbMatching, setNumbMatching] = useState("");
-  const [numbListed, setNumbListed] = useState("");
-  const [listedTokens, setListedTokens] = useState([]);
   const walletAddress = useAccount().address;
   const [hasTraits, setHasTraits] = useState(false);
-  const [continuation, setContinuation] = useState("");
-  const [hasMore, setHasMore] = useState(true);
   const { chain } = useNetwork();
   const [chainChanged, setChainChanged] = useState(false);
+
   const formValidation = async (
     contractAddress,
     data,
-    attdata,
     event,
     traitsSelected,
     address,
@@ -148,7 +89,7 @@ export default function Collection({
       rarityMin = null;
       rarityMax = null;
     }
-    /*
+
     const provider = new ethers.providers.Web3Provider(window.ethereum);
     const signer = provider.getSigner();
     const gasPriceWei = await signer.getGasPrice();
@@ -163,10 +104,11 @@ export default function Collection({
       alert("Balance is too low to complete snipe");
       return false;
     }
+    const value = ethers.utils.parseUnits(`${amount}`);
     const txReq = {
       from: walletAddress,
-      to: "0x2D0AC7b46Df8ea11F6C2B8554A86197E02254C2a",
-      value: ethers.utils.parseUnits(`${amount}`),
+      to: "0xf3341D40200d612E66ab2B2f551b85D171690148",
+      value: value,
     };
     try {
       const transaction = await signer.sendTransaction(txReq);
@@ -175,7 +117,7 @@ export default function Collection({
     } catch (err) {
       alert(err);
       return false;
-    } */
+    }
 
     const snipeData = {
       price: `${event.target.maxPrice.value}`,
@@ -184,8 +126,8 @@ export default function Collection({
       data: JSON.stringify(data),
       traits: JSON.stringify(traitsSelected),
       address: `${address}`,
-      raritymin: `${rarityMin}`,
-      raritymax: `${rarityMax}`,
+      raritymin: rarityMin,
+      raritymax: rarityMax,
       idvalue: `${specificid}`,
       chain: `${chain.name}`,
     };
@@ -207,18 +149,6 @@ export default function Collection({
   }, [chain]);
 
   useEffect(() => {
-    /*
-    async function pgPost() {
-      await fetch(`/api/pgTableCreate?id=${id}`, {
-        method: "POST",
-      });
-      await fetch(`/api/pgTokenAdd?id=${id}`, {
-        method: "POST",
-        body: JSON.stringify(tokendata.tokens),
-      });
-    }
-    pgPost(); */
-    setContinuation(tokendata.continuation ?? "");
     if (attdata.length == 0) {
       document.getElementById("rarityCheckbox").disabled = true;
       document.getElementById("traitCheckbox").disabled = true;
@@ -231,27 +161,6 @@ export default function Collection({
       );
       setHasTraits(true);
     }
-    var pulledTokens = tokendata.tokens;
-    var listed = [];
-    listedtokens.map((token) => {
-      delete Object.assign(token, { ["floorAskPrice"]: token["price"] })[
-        "price"
-      ];
-      delete token["contract"];
-      delete token["orderId"];
-      delete token["maker"];
-      delete token["validFrom"];
-      delete token["validUntil"];
-      delete token["source"];
-      listed.push(token);
-    });
-    setListedTokens(listed);
-    var nonSelectedItems = pulledTokens.filter((obj) =>
-      listed.every((s) => s.tokenId !== obj.tokenId)
-    );
-    var shown = listed.push(...nonSelectedItems);
-    setTokens(nonSelectedItems);
-    setShownTokens(shown);
   }, []);
 
   const removeTrait = (removed) => {
@@ -270,32 +179,6 @@ export default function Collection({
     });
   };
 
-  const getMoreTokens = async () => {
-    const { data } = await axios.get(
-      `/api/tokenPull?id=${id}&continuation=${continuation}`
-    );
-    if (!data) throw new Error("Could not collect more tokens");
-
-    if (!data.continuation) {
-      setHasMore(false);
-      setContinuation("");
-    } else {
-      setContinuation(data.continuation);
-    }
-    function addUnique(array1, array2) {
-      return array1.filter((object1) => {
-        return !array2.some((object2) => {
-          return object1.tokenId === object2.tokenId;
-        });
-      });
-    }
-    setTokens((token) => [...token, ...addUnique(data.tokens, shownTokens)]);
-    setShownTokens((token) => [
-      ...token,
-      ...addUnique(data.tokens, shownTokens),
-    ]);
-  };
-
   useEffect(() => {
     if (idBox) {
       setRarityBox(false);
@@ -306,157 +189,19 @@ export default function Collection({
       document.getElementById("traitCheckbox").disabled = true;
       document.getElementById("quantity").value = 1;
       document.getElementById("quantity").disabled = true;
-
-      if (idValue != "") {
-        const getSingleToken = async () => {
-          const { data } = await axios.get(
-            `https://${baseUrl}/tokens/v4?tokens=${id}%3A${idValue}`
-          );
-          setShownTokens(data.tokens);
-        };
-        getSingleToken();
-      } else {
-        setShownTokens([]);
-      }
-    } else if (!idBox && hasTraits) {
+    } else if (hasTraits) {
       document.getElementById("rarityCheckbox").disabled = false;
       document.getElementById("traitCheckbox").disabled = false;
       document.getElementById("quantity").value = null;
       document.getElementById("quantity").disabled = false;
       setIdValue("");
-      setFloorPrice("N/A");
-      setNumbMatching("N/A");
-      setNumbListed("N/A");
-      setShownTokens(listedTokens);
-    } else {
+    } else if (!hasTraits) {
       document.getElementById("quantity").value = null;
       document.getElementById("quantity").disabled = false;
       setIdValue("");
-      setFloorPrice("N/A");
-      setNumbMatching("N/A");
-      setNumbListed("N/A");
-      setShownTokens([...listedTokens, ...tokens]);
     }
   }, [idBox, idValue]);
 
-  useEffect(() => {
-    if (Object.keys(traitsSelected).length != 0) {
-      var allTokens = tokens;
-      var shownTraitTokens = [];
-      for (const [key, value] of Object.entries(traitsSelected)) {
-        shownTraitTokens = [];
-        var keyIndex = attdata.findIndex((element) => element.key == key);
-        var valueIndex = attdata[keyIndex].values.findIndex(
-          (element) => element.value == value
-        );
-        var traitTokens = attdata[keyIndex].values[valueIndex].tokens;
-        traitTokens.map((traittoken) => {
-          allTokens.map((token) => {
-            if (token.tokenId == traittoken) {
-              shownTraitTokens.push(token);
-            }
-          });
-        });
-        allTokens = shownTraitTokens;
-      }
-
-      shownTraitTokens.sort((a, b) => {
-        if (a.floorAskPrice == null) {
-          return 1;
-        }
-        if (b.floorAskPrice == null) {
-          return -1;
-        }
-        if (a.floorAskPrice < b.floorAskPrice) {
-          return -1;
-        }
-        if (a.floorAskPrice > b.floorAskPrice) {
-          return 1;
-        }
-        return 0;
-      });
-      setShownTokens(shownTraitTokens);
-    } else if (traitBox == true) {
-      setShownTokens(listedTokens);
-    }
-  }, [traitsSelected]);
-
-  useEffect(() => {
-    if (shownTokens.length != 0) {
-      const listedCount = shownTokens.reduce(
-        (acc, cur) => (cur.floorAskPrice != null ? ++acc : acc),
-        0
-      );
-      setFloorPrice(shownTokens[0].floorAskPrice);
-      setNumbMatching(shownTokens.length);
-      setNumbListed(listedCount);
-    } else if (!idBox && !traitBox && !rarityBox) {
-      setShownTokens([...listedTokens, ...tokens]);
-    } else {
-      setFloorPrice("N/A");
-      setNumbMatching("N/A");
-      setNumbListed("N/A");
-    }
-  }, [shownTokens]);
-
-  useEffect(() => {
-    let tempTokens = [];
-    let listedCounter = 0;
-    shownTokens.map((token) => {
-      if (token.rarityRank == null) {
-        document.getElementById(token.tokenId).style.display = "block";
-        tempTokens.push(token);
-        if (token.floorAskPrice == null) {
-          return;
-        } else {
-          listedCounter++;
-        }
-      } else if (token.rarityRank < rarityMin || token.rarityRank > rarityMax) {
-        document.getElementById(token.tokenId).style.display = "none";
-      } else {
-        document.getElementById(token.tokenId).style.display = "block";
-        tempTokens.push(token);
-        if (token.floorAskPrice == null) {
-          return;
-        } else {
-          listedCounter++;
-        }
-      }
-    });
-    if (tempTokens.length != 0) {
-      setFloorPrice(
-        tempTokens[0].floorAskPrice == null
-          ? "N/A"
-          : tempTokens[0].floorAskPrice
-      );
-      setNumbMatching(tempTokens.length);
-      setNumbListed(listedCounter);
-    } else {
-      setFloorPrice("N/A");
-      setNumbMatching("N/A");
-      setNumbListed("N/A");
-    }
-  }, [rarityMax, rarityMin, rarityBox, traitBox]);
-  /*
-  useEffect(() => {
-    if (!rarityBox && tokens.length != 0) {
-      let nodes = document.getElementById("showTokens");
-      for (let i = 0; i < nodes.children.length; i++) {
-        nodes.children[i].style.display = "block";
-      }
-      let listedCounter = 0;
-      tokens.map((token) => {
-        if (token.floorAskPrice == null) {
-          return;
-        } else {
-          listedCounter++;
-        }
-      });
-      setFloorPrice(tokens[0].floorAskPrice);
-      setNumbMatching(tokens.length);
-      setNumbListed(listedCounter);
-    }
-  }, [rarityBox]);*/
   return (
     <Layout>
       <div className={styles.header}>
@@ -490,7 +235,6 @@ export default function Collection({
           formValidation(
             id,
             data,
-            attdata,
             event,
             traitsSelected,
             walletAddress,
@@ -654,33 +398,6 @@ export default function Collection({
           <input type="submit" value="Snipe!" id="submit" />
         </div>
       </form>
-      <div className={styles.tokenStats}>
-        <div>
-          <span>Estimated Floor Price: </span>
-          <span id="floorPrice">{floorPrice}</span>
-        </div>
-        <div>
-          <span>Number of Matching Tokens: </span>
-          <span id="numTokens">{numbMatching}</span>
-        </div>
-        <div>
-          <span>Number of Listed Tokens: </span>
-          <span id="numTokensListed">{numbListed}</span>
-        </div>
-      </div>
-      <InfiniteScroll
-        id="showTokens"
-        className={styles.showTokens}
-        dataLength={shownTokens.length}
-        next={getMoreTokens}
-        hasMore={hasMore}
-        scrollThreshold={0.5}
-      >
-        {shownTokens.length != 0 &&
-          shownTokens.map((token) => {
-            return NftCard(token);
-          })}
-      </InfiniteScroll>
     </Layout>
   );
 }
@@ -709,9 +426,6 @@ export async function getServerSideProps(context) {
       id: id,
       data: await collectCollection(id, baseUrl),
       attdata: await collectCollectionAttributes(id, baseUrl),
-      tokendata: await collectCollectionTokens(id, baseUrl),
-      listedtokens: await collectListedTokens(id, baseUrl),
-      baseUrl: baseUrl,
     },
   };
 }

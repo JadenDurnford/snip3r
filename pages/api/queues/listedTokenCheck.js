@@ -23,7 +23,6 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   const walletAddress = notifData.address;
   const contractAddress = notifData.contract;
   const id = `${walletAddress}` + ":" + `${contractAddress}`;
-  const data = JSON.parse(notifData.data);
   const traitsSelected = JSON.parse(notifData.traits);
   const rarityMin = notifData.raritymin;
   const rarityMax = notifData.raritymax;
@@ -38,7 +37,12 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
     reservoirUrl = "api-rinkeby.reservoir.tools";
     alchemyUrl = `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_TESTNET}`;
   }
-
+  const {
+    data: { collection },
+  } = await axios.get(
+    `https://${reservoirUrl}/collection/v3?id=${contractAddress}&includeTopBid=false`,
+    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
+  );
   const {
     data: { attributes },
   } = await axios.get(
@@ -46,22 +50,31 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
     { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
   );
   const attdata = attributes;
-
-  const pushNotificationtitle = `Your snipe on ${data.name} was created`;
+  const pushNotificationtitle = `Your snipe on ${collection.name} was created`;
   const pushNotificationMessage = `Your snipe with parameters: 
   Max Price= ${notifData.price}
   Quantity= ${notifData.quantity}
   Traits Selected=${Object.entries(traitsSelected).map((trait) => {
     return " " + trait[0] + ": " + trait[1];
   })}`;
-  const notificationTitle = `Your snipe on ${data.name} was created`;
+  const notificationTitle = `Your snipe on ${collection.name} was created`;
   const notificationMessage = `Your snipe with parameters: 
   Max Price= ${notifData.price}
   Quantity= ${notifData.quantity}
-  Traits Selected=${Object.entries(traitsSelected).map((trait) => {
-    return " " + trait[0] + ": " + trait[1];
-  })}`;
-  var image = `${data.metadata.imageUrl}`;
+  ${
+    Object.keys(traitsSelected) != 0
+      ? `Traits Selected=${Object.entries(traitsSelected).map((trait) => {
+          return " " + trait[0] + ": " + trait[1];
+        })}
+        `
+      : ""
+  }${
+    rarityMin != null && rarityMax != null
+      ? `Rarity Range Selected= ${rarityMin} - ${rarityMax}
+      `
+      : ""
+  }${specificid != "" ? `Token ID Selected= ${specificid}` : ""}`;
+  var image = `${collection.metadata.imageUrl}`;
   if (image == null) {
     image = "";
   }
@@ -79,61 +92,6 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   );
 
   console.log(tx);
-
-  /*
-  var tokens;
-
-  if (specificid != "") {
-    var specifictoken = await axios.get(
-      `https://${reservoirUrl}/tokens/v4?tokens=${contractAddress}%3A${specificid}`
-    );
-    tokens = specifictoken.data.tokens;
-  } else {
-    const { data: pulledTokens } = await axios.get(
-      `http://localhost:3000/api/tokenPuller?id=${contractAddress}`
-    );
-    var allTokens = [];
-    var rarityTokens;
-    allTokens = pulledTokens;
-    if (traitsSelected != {}) {
-      var traitTokens = [];
-      for (const [key, value] of Object.entries(traitsSelected)) {
-        traitTokens = [];
-        var keyIndex = attdata.findIndex((element) => element.key == key);
-        var valueIndex = attdata[keyIndex].values.findIndex(
-          (element) => element.value == value
-        );
-        var traitTokens = attdata[keyIndex].values[valueIndex].tokens;
-        traitTokens.map((traittoken) => {
-          allTokens.map((id) => {
-            if (id.tokenId == traittoken) {
-              traitTokens.push(id);
-            }
-          });
-        });
-        allTokens = traitTokens;
-      }
-    }
-    if (notifData.raritymin == null || notifData.raritymax == null) {
-      rarityTokens = allTokens;
-    } else {
-      rarityTokens = allTokens.filter((token) => {
-        if (
-          token.rarityRank >= notifData.raritymin &&
-          token.rarityRank <= rarityMax
-        ) {
-          return token;
-        } else if (token.rarityRank == null) {
-          return token;
-        }
-      });
-    }
-    tokens = rarityTokens;
-  }
-
-  const tokenList = tokens.map((token) => {
-    return token.tokenId;
-  }); */
 
   const unixTime = Date.now() / 1000;
 
@@ -203,18 +161,49 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
 
     if (rarityMin != null && rarityMax != null) {
       var tokenString = "";
-      uniqueTokens.forEach((token) => {
-        tokenString += `&tokens=${contractAddress}%3A${token}`;
-      });
-      const { tokens } = await axios.get(
-        `https://${reservoirUrl}/tokens/v4?sortBy=floorAskPrice&limit=50&includeTopBid=false${tokenString}`
-      );
-      uniqueTokens = [];
-      tokens.forEach((token) => {
-        if (token.rarityRank <= rarityMax && token.rarityRank >= rarityMin) {
-          uniqueTokens.push(token.tokenId);
+      var tempTokens = [];
+      if (uniqueTokens.length > 50) {
+        for (let i = 0; i < Math.floor(uniqueTokens.length / 50); i++) {
+          for (let j = 0; j < 50; j++) {
+            var numb = j + 50 * i;
+            tokenString += `&tokens=${contractAddress}%3A${uniqueTokens[numb]}`;
+          }
+          const { tokens } = await axios.get(
+            `https://${reservoirUrl}/tokens/v4?sortBy=floorAskPrice&limit=50&includeTopBid=false${tokenString}`
+          );
+          tokens.forEach((token) => {
+            if (
+              token.rarityRank <= rarityMax &&
+              token.rarityRank >= rarityMin
+            ) {
+              tempTokens.push(token.tokenId);
+            }
+          });
+          tokenString = "";
         }
-      });
+        uniqueTokens = tempTokens;
+      } else if (uniqueTokens <= 50) {
+        uniqueTokens.forEach((token) => {
+          tokenString += `&tokens=${contractAddress}%3A${token}`;
+        });
+        const { tokens } = await axios.get(
+          `https://${reservoirUrl}/tokens/v4?sortBy=floorAskPrice&limit=50&includeTopBid=false${tokenString}`
+        );
+        tokens.forEach((token) => {
+          if (token.rarityRank <= rarityMax && token.rarityRank >= rarityMin) {
+            tempTokens.push(token.tokenId);
+          }
+        });
+        uniqueTokens = tempTokens;
+      }
+    }
+
+    if (specificid != "") {
+      if (uniqueTokens.includes(specificid)) {
+        uniqueTokens = [specificid];
+      } else {
+        uniqueTokens = [];
+      }
     }
     console.log(uniqueTokens);
 
@@ -225,8 +214,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
             notifData.price &&
           events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price != null
         ) {
-          console.log(`Token #${uniqueTokens[i]} matches query`);
-          /* const connection = new ethers.providers.JsonRpcProvider(
+          const connection = new ethers.providers.JsonRpcProvider(
             `${alchemyUrl}`
           );
 
@@ -290,7 +278,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
             }
           } catch (err) {
             console.log("no data");
-          } */
+          }
         }
       }
     }

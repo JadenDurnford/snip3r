@@ -2,7 +2,6 @@ import listedTokenCheckQueue from "./queues/listedTokenCheck";
 import { Client } from "pg";
 
 export default async (req, res) => {
-  console.log("here");
   const client = new Client({
     user: `${process.env.PGUSER}`,
     host: `${process.env.PGHOST}`,
