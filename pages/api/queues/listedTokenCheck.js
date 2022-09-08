@@ -120,7 +120,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
 
     var uniqueTokens = [...new Set(orderIds)];
     var fulfilledIds = await client.query(
-      `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
+      `SELECT fulfilled_ids FROM snip3r.snipe_tracking WHERE id= '${id}'`
     );
 
     var idArray;
@@ -246,7 +246,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
               await tokenListedNotif.enqueue(tokenPkg);
 
               var filledIds = await client.query(
-                `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
+                `SELECT fulfilled_ids FROM snip3r.snipe_tracking WHERE id= '${id}'`
               );
               var newIds;
               if (filledIds.rows[0].fulfilled_ids != null) {
@@ -258,14 +258,14 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
                 newIds = uniqueTokens[i];
               }
               await client.query(
-                `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
+                `UPDATE snip3r.snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
               );
               var quant = await client.query(
-                `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
+                `SELECT quantity FROM snip3r.snipe_tracking WHERE id= '${id}'`
               );
               var count = quant.rows[0].quantity + 1;
               await client.query(
-                `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
+                `UPDATE snip3r.snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
               );
               if (count >= parseInt(notifData.quantity)) {
                 console.log("adequate snipes fulfilled, terminating process");
