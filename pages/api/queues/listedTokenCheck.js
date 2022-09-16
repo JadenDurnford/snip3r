@@ -221,32 +221,13 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
             notifData.price &&
           events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price != null
         ) {
-          /*const provider = new ethers.providers.JsonRpcProvider(
+          const provider = new ethers.providers.JsonRpcProvider(
             `${alchemyUrl}`
           );
 
           const wallet = new ethers.Wallet(process.env.SNIPE_PK);
           const signer = wallet.connect(provider);
-          const flashbotsProvider = await FlashbotsBundleProvider.create(provider, signer);
-          */
-          const provider = new ethers.providers.AlchemyProvider(
-            "goerli",
-            process.env.ALCHEMY_GOERLI
-          );
 
-          const authSigner = new ethers.Wallet(
-            "0x2000000000000000000000000000000000000000000000000000000000000000",
-            provider
-          );
-          const wallet = new ethers.Wallet(process.env.SNIPE_PK);
-          const signer = wallet.connect(provider);
-
-          const flashbotsProvider = await FlashbotsBundleProvider.create(
-            provider,
-            authSigner,
-            "https://relay-goerli.flashbots.net",
-            "goerli"
-          );
           try {
             await axios
               .post(`https://${reservoirUrl}/execute/buy/v4`, {
@@ -258,85 +239,11 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
                 try {
                   var tx = res.data.steps[1].items[0].data;
                   tx["from"] = `${wallet.address}`;
-                  tx["maxPriorityFeePerGas"] =
-                    ethers.BigNumber.from("0xB2D05E00");
-                  tx["maxFeePerGas"] = ethers.BigNumber.from("0xB2D05E10");
-                  const completeTx = await signer.populateTransaction(tx);
+                  const transaction = await signer.sendTransaction(tx);
+                  console.log(transaction);
+                  const success = await transaction.wait(2);
+                  console.log(success);
 
-                  const signedTransactions = await flashbotsProvider.signBundle(
-                    [
-                      {
-                        signer: signer,
-                        transaction: completeTx,
-                      },
-                    ]
-                  );
-
-                  const blockNumber = await provider.getBlockNumber();
-
-                  console.log(new Date());
-                  const simulation = await flashbotsProvider.simulate(
-                    signedTransactions,
-                    blockNumber + 1
-                  );
-                  console.log(new Date());
-
-                  // Using TypeScript discrimination
-                  if ("error" in simulation) {
-                    console.log(
-                      `Simulation Error: ${simulation.error.message}`
-                    );
-                  } else {
-                    console.log(
-                      `Simulation Success: ${blockNumber} ${JSON.stringify(
-                        simulation,
-                        null,
-                        2
-                      )}`
-                    );
-                  }
-                  console.log(signedTransactions);
-
-                  for (var j = 1; j <= 25; j++) {
-                    const bundleSubmission =
-                      await flashbotsProvider.sendRawBundle(
-                        signedTransactions,
-                        blockNumber + j
-                      );
-                    console.log("submitted for block # ", blockNumber + j);
-                  }
-                  console.log("bundles submitted");
-
-                  /*
-                  const result = await flashbotsProvider.sendPrivateTransaction(
-                    {
-                      transaction: completeTx,
-                      signer: wallet,
-                    },
-                    {
-                      maxBlockNumber: (await provider.getBlockNumber()) + 5, // only allow tx to be mined for the next 5 blocks
-                    }
-                  );
-
-                  const waitRes = await result.wait();
-                  if (
-                    waitRes ===
-                    FlashbotsTransactionResolution.TransactionIncluded
-                  ) {
-                    console.log("Private transaction successfully mined.");
-                  } else if (
-                    waitRes ===
-                    FlashbotsTransactionResolution.TransactionDropped
-                  ) {
-                    console.log(
-                      "Private transaction was not mined and has been removed from the system."
-                    );
-                  }
-                  /*
-              const transaction = await signer.sendTransaction(tx);
-              console.log(transaction);
-              const success = await transaction.wait(6);
-              console.log(success); */
                   var {
                     data: { tokens },
                   } = await axios.get(
@@ -382,63 +289,6 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
                   console.log(error);
                 }
               });
-            /*
-            const {
-              data: { steps },
-            } = await axios.get(
-              `https://${reservoirUrl}/execute/buy/v2?token=${contractAddress}%3A${uniqueTokens[i]}&taker=${walletAddress}&onlyQuote=false&referrer=0xFf14BA529d203823F4B6d4a7F23c1568333AE60b&referrerFeeBps=250&source=reservoir.market&partial=false&skipBalanceCheck=true`
-            );
-            var tx = steps[0].data;
-            console.log(tx);
-            tx["from"] = `${wallet.address}`;
-            try {
-              const transaction = await signer.sendTransaction(tx);
-              console.log(transaction);
-              const success = await transaction.wait(6);
-              console.log(success);
-
-              var {
-                data: { tokens },
-              } = await axios.get(
-                `https://${reservoirUrl}/tokens/v4?tokens=${contractAddress}%3A${uniqueTokens[i]}`
-              );
-              var tokenPkg = tokens[0];
-              tokenPkg.address = notifData.address;
-              tokenPkg.price =
-                events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price;
-              await tokenListedNotif.enqueue(tokenPkg);
-
-              var filledIds = await client.query(
-                `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
-              );
-              var newIds;
-              if (filledIds.rows[0].fulfilled_ids != null) {
-                newIds = filledIds.rows[0].fulfilled_ids.concat(
-                  ",",
-                  uniqueTokens[i]
-                );
-              } else {
-                newIds = uniqueTokens[i];
-              }
-              await client.query(
-                `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
-              );
-              var quant = await client.query(
-                `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
-              );
-              var count = quant.rows[0].quantity + 1;
-              await client.query(
-                `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
-              );
-              if (count >= parseInt(notifData.quantity)) {
-                console.log("adequate snipes fulfilled, terminating process");
-                client.end();
-                taskDelete();
-                return resolve;
-              }
-            } catch (error) {
-              console.log(error);
-            } */
           } catch (err) {
             console.log("no data");
           }
