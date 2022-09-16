@@ -3,6 +3,11 @@ import axios from "axios";
 import tokenListedNotif from "./tokenListed";
 import { Client } from "pg";
 import EpnsSDK from "@epnsproject/backend-sdk-staging";
+import { ethers } from "ethers";
+import {
+  FlashbotsBundleProvider,
+  FlashbotsTransactionResolution,
+} from "@flashbots/ethers-provider-bundle";
 
 export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   const client = new Client({
@@ -22,26 +27,65 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   const walletAddress = notifData.address;
   const contractAddress = notifData.contract;
   const id = `${walletAddress}` + ":" + `${contractAddress}`;
-  const data = JSON.parse(notifData.data);
-  const attdata = JSON.parse(notifData.attdata);
   const traitsSelected = JSON.parse(notifData.traits);
+  const rarityMin = notifData.raritymin;
+  const rarityMax = notifData.raritymax;
   const specificid = notifData.idvalue;
-  const pushNotificationtitle = `Your snipe on ${data.name} was created`;
+  const chain = notifData.chain;
+  var reservoirUrl;
+  var alchemyUrl;
+  if (chain == "Ethereum") {
+    reservoirUrl = "api.reservoir.tools";
+    alchemyUrl = `https://eth.alchemyapi.io/v2/${process.env.ALCHEMY_MAINNET}`;
+  } else if (chain == "Rinkeby") {
+    reservoirUrl = "api-rinkeby.reservoir.tools";
+    alchemyUrl = `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_TESTNET}`;
+  } else if (chain == "Goerli") {
+    reservoirUrl = "api-goerli.reservoir.tools";
+    alchemyUrl = `https://eth-goerli.g.alchemy.com/v2/${process.env.ALCHEMY_GOERLI}`;
+  }
+  const {
+    data: { collection },
+  } = await axios.get(
+    `https://${reservoirUrl}/collection/v3?id=${contractAddress}&includeTopBid=false`,
+    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
+  );
+  const {
+    data: { attributes },
+  } = await axios.get(
+    `https://${reservoirUrl}/collections/${contractAddress}/attributes/static/v1`,
+    { headers: { "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}` } }
+  );
+  const attdata = attributes;
+  const pushNotificationtitle = `Your snipe on ${collection.name} was created`;
   const pushNotificationMessage = `Your snipe with parameters: 
   Max Price= ${notifData.price}
   Quantity= ${notifData.quantity}
   Traits Selected=${Object.entries(traitsSelected).map((trait) => {
     return " " + trait[0] + ": " + trait[1];
   })}`;
-  const notificationTitle = `Your snipe on ${data.name} was created`;
+  const notificationTitle = `Your snipe on ${collection.name} was created`;
   const notificationMessage = `Your snipe with parameters: 
   Max Price= ${notifData.price}
   Quantity= ${notifData.quantity}
-  Traits Selected=${Object.entries(traitsSelected).map((trait) => {
-    return " " + trait[0] + ": " + trait[1];
-  })}`;
-  const image = `${data.metadata.imageUrl}`;
-
+  ${
+    Object.keys(traitsSelected) != 0
+      ? `Traits Selected=${Object.entries(traitsSelected).map((trait) => {
+          return " " + trait[0] + ": " + trait[1];
+        })}
+        `
+      : ""
+  }${
+    rarityMin != null && rarityMax != null
+      ? `Rarity Range Selected= ${rarityMin} - ${rarityMax}
+      `
+      : ""
+  }${specificid != "" ? `Token ID Selected= ${specificid}` : ""}`;
+  var image = `${collection.metadata.imageUrl}`;
+  if (image == null) {
+    image = "";
+  }
+  /*
   const tx = await epnsSdk.sendNotification(
     notifData.address,
     pushNotificationtitle,
@@ -54,61 +98,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
     null //this can be left as null
   );
 
-  console.log(tx);
-
-  var tokens;
-
-  if (specificid != "") {
-    var specifictoken = await axios.get(
-      `https://api.reservoir.tools/tokens/v4?tokens=${contractAddress}%3A${specificid}`
-    );
-    tokens = specifictoken.data.tokens;
-  } else {
-    const { data: pulledTokens } = await axios.get(
-      `http://localhost:3000/api/tokenPuller?id=${contractAddress}`
-    );
-    var allTokens = [];
-    var rarityTokens;
-    allTokens = pulledTokens;
-    if (traitsSelected != {}) {
-      var traitTokens = [];
-      for (const [key, value] of Object.entries(traitsSelected)) {
-        traitTokens = [];
-        var keyIndex = attdata.findIndex((element) => element.key == key);
-        var valueIndex = attdata[keyIndex].values.findIndex(
-          (element) => element.value == value
-        );
-        var traitTokens = attdata[keyIndex].values[valueIndex].tokens;
-        traitTokens.map((traittoken) => {
-          allTokens.map((id) => {
-            if (id.tokenId == traittoken) {
-              traitTokens.push(id);
-            }
-          });
-        });
-        allTokens = traitTokens;
-      }
-    }
-    if (notifData.raritymin == null || notifData.raritymax == null) {
-      rarityTokens = allTokens;
-    } else {
-      rarityTokens = allTokens.filter((token) => {
-        if (
-          token.rarityRank >= notifData.raritymin &&
-          token.rarityRank <= rarityMax
-        ) {
-          return token;
-        } else if (token.rarityRank == null) {
-          return token;
-        }
-      });
-    }
-    tokens = rarityTokens;
-  }
-
-  const tokenList = tokens.map((token) => {
-    return token.tokenId;
-  });
+  console.log(tx); */
 
   const unixTime = Date.now() / 1000;
 
@@ -123,23 +113,19 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
     const {
       data: { events },
     } = await axios.get(
-      `https://api.reservoir.tools/events/tokens/floor-ask/v2?contract=${contractAddress}&startTimestamp=${unixTime}&sortDirection=desc&limit=50`,
+      `https://${reservoirUrl}/events/tokens/floor-ask/v2?contract=${contractAddress}&startTimestamp=${unixTime}&sortDirection=desc&limit=50`,
       {
         headers: {
-          "x-api-key": "30e494ac-228f-48d7-8f5a-9202a2e7fc26",
+          "x-api-key": `${process.env.NEXT_PUBLIC_RESERVOIR_KEY}`,
         },
       }
     );
 
-    var orderIds = events.map((listing) => {
+    const orderIds = events.map((listing) => {
       return listing.token.tokenId;
     });
 
-    const matchingTokens = orderIds.filter((element) =>
-      tokenList.includes(element)
-    );
-
-    var uniqueTokens = [...new Set(matchingTokens)];
+    var uniqueTokens = [...new Set(orderIds)];
     var fulfilledIds = await client.query(
       `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
     );
@@ -158,6 +144,76 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
       return idArray.indexOf(id) < 0;
     });
 
+    if (Object.keys(traitsSelected).length != 0) {
+      var allTokens = uniqueTokens;
+      var allTraitTokens = [];
+      for (const [key, value] of Object.entries(traitsSelected)) {
+        allTraitTokens = [];
+        var keyIndex = attdata.findIndex((element) => element.key == key);
+        var valueIndex = attdata[keyIndex].values.findIndex(
+          (element) => element.value == value
+        );
+        var traitTokens = attdata[keyIndex].values[valueIndex].tokens;
+        traitTokens.map((traittoken) => {
+          allTokens.map((token) => {
+            if (token == traittoken) {
+              allTraitTokens.push(token);
+            }
+          });
+        });
+        allTokens = allTraitTokens;
+      }
+      uniqueTokens = allTokens;
+    }
+
+    if (rarityMin != null && rarityMax != null) {
+      var tokenString = "";
+      var tempTokens = [];
+      if (uniqueTokens.length > 50) {
+        for (let i = 0; i < Math.floor(uniqueTokens.length / 50); i++) {
+          for (let j = 0; j < 50; j++) {
+            var numb = j + 50 * i;
+            tokenString += `&tokens=${contractAddress}%3A${uniqueTokens[numb]}`;
+          }
+          const { tokens } = await axios.get(
+            `https://${reservoirUrl}/tokens/v4?sortBy=floorAskPrice&limit=50&includeTopBid=false${tokenString}`
+          );
+          tokens.forEach((token) => {
+            if (
+              token.rarityRank <= rarityMax &&
+              token.rarityRank >= rarityMin
+            ) {
+              tempTokens.push(token.tokenId);
+            }
+          });
+          tokenString = "";
+        }
+        uniqueTokens = tempTokens;
+      } else if (uniqueTokens <= 50) {
+        uniqueTokens.forEach((token) => {
+          tokenString += `&tokens=${contractAddress}%3A${token}`;
+        });
+        const { tokens } = await axios.get(
+          `https://${reservoirUrl}/tokens/v4?sortBy=floorAskPrice&limit=50&includeTopBid=false${tokenString}`
+        );
+        tokens.forEach((token) => {
+          if (token.rarityRank <= rarityMax && token.rarityRank >= rarityMin) {
+            tempTokens.push(token.tokenId);
+          }
+        });
+        uniqueTokens = tempTokens;
+      }
+    }
+
+    if (specificid != "") {
+      if (uniqueTokens.includes(specificid)) {
+        uniqueTokens = [specificid];
+      } else {
+        uniqueTokens = [];
+      }
+    }
+    console.log(uniqueTokens);
+
     if (uniqueTokens.length != 0) {
       for (var i = 0; i < uniqueTokens.length; i++) {
         if (
@@ -165,61 +221,82 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
             notifData.price &&
           events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price != null
         ) {
-          var {
-            data: { tokens },
-          } = await axios.get(
-            `https://api.reservoir.tools/tokens/v4?tokens=${contractAddress}%3A${uniqueTokens[i]}`
-          );
-          var tokenPkg = tokens[0];
-          tokenPkg.address = notifData.address;
-          tokenPkg.price =
-            events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price;
-          await tokenListedNotif.enqueue(tokenPkg);
-
-          var filledIds = await client.query(
-            `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
-          );
-          var newIds;
-          if (filledIds.rows[0].fulfilled_ids != null) {
-            newIds = filledIds.rows[0].fulfilled_ids.concat(
-              ",",
-              uniqueTokens[i]
-            );
-          } else {
-            newIds = uniqueTokens[i];
-          }
-
-          await client.query(
-            `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
+          const provider = new ethers.providers.JsonRpcProvider(
+            `${alchemyUrl}`
           );
 
-          var quant = await client.query(
-            `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
-          );
-          var count = quant.rows[0].quantity + 1;
-          await client.query(
-            `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
-          );
-          if (count >= parseInt(notifData.quantity)) {
-            console.log("adequate snipes fulfilled, terminating process");
-            client.end();
-            taskDelete();
-            return resolve;
+          const wallet = new ethers.Wallet(process.env.SNIPE_PK);
+          const signer = wallet.connect(provider);
+
+          try {
+            await axios
+              .post(`https://${reservoirUrl}/execute/buy/v4`, {
+                "tokens": [`${contractAddress}:${uniqueTokens[i]}`],
+                "feesOnTop": ["0xFf14BA529d203823F4B6d4a7F23c1568333AE60b:250"],
+                "taker": `${walletAddress}`,
+              })
+              .then(async function (res) {
+                try {
+                  var tx = res.data.steps[1].items[0].data;
+                  tx["from"] = `${wallet.address}`;
+                  const transaction = await signer.sendTransaction(tx);
+                  console.log(transaction);
+                  const success = await transaction.wait(2);
+                  console.log(success);
+
+                  var {
+                    data: { tokens },
+                  } = await axios.get(
+                    `https://${reservoirUrl}/tokens/v4?tokens=${contractAddress}%3A${uniqueTokens[i]}`
+                  );
+                  var tokenPkg = tokens[0];
+                  tokenPkg.address = notifData.address;
+                  tokenPkg.price =
+                    events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price;
+                  await tokenListedNotif.enqueue(tokenPkg);
+
+                  var filledIds = await client.query(
+                    `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
+                  );
+                  var newIds;
+                  if (filledIds.rows[0].fulfilled_ids != null) {
+                    newIds = filledIds.rows[0].fulfilled_ids.concat(
+                      ",",
+                      uniqueTokens[i]
+                    );
+                  } else {
+                    newIds = uniqueTokens[i];
+                  }
+                  await client.query(
+                    `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
+                  );
+                  var quant = await client.query(
+                    `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
+                  );
+                  var count = quant.rows[0].quantity + 1;
+                  await client.query(
+                    `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
+                  );
+                  if (count >= parseInt(notifData.quantity)) {
+                    console.log(
+                      "adequate snipes fulfilled, terminating process"
+                    );
+                    client.end();
+                    taskDelete();
+                    return resolve;
+                  }
+                } catch (error) {
+                  console.log(error);
+                }
+              });
+          } catch (err) {
+            console.log("no data");
           }
         }
       }
     }
-
-    setTimeout(apiPoll, 5000, resolve, reject);
+    setTimeout(apiPoll, 500, resolve, reject);
   };
 
   return new Promise(apiPoll);
 });
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "4mb",
-    },
-  },
-};

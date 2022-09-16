@@ -5,7 +5,13 @@ export default function NftCard(token) {
   return (
     <div id={token.tokenId} className={styles.token}>
       <input type="hidden" value={token.rarityRank} />
-      <Image src={token.image} width="200px" height="200px" />
+      <Image
+        src={token.image ?? "/placeholder.png"}
+        placeholder="blur"
+        blurDataURL="/placeholder.png"
+        width="200px"
+        height="200px"
+      />
       <div className={styles.tokenInfo}>
         <span>{"#" + token.tokenId}</span>
         {token.floorAskPrice != null && (

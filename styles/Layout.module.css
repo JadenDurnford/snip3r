@@ -1,118 +1,142 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+@font-face {
+  font-family: SFNSRounded;
+  src: url("../fonts/SFNSRounded.ttf");
+}
 
 .header {
-    display: flex;
-    justify-content: space-between;
-    width: 100%;
-    height: 136px;
-    left: 0px;
-    top: 0px;
-    align-items: center;
-    padding: 0px 20px;
-    position: relative;
-    background: #313132;
-    box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
-    z-index: 10000;
-}
-
-.header_links {
-    display: flex;
-    justify-content: left;
-    align-items: center;
-    padding: 0px 20px;
-    width: 300px;
-    flex-grow: 2;
-}
-
-.header_links > a {
-    font-family: 'Inter';
-    font-style: normal;
-    font-weight: 400;
-    font-size: 20px;
-    line-height: 24px;
-    margin: 0px 28.5px;
-
-    color: #FFFFFF;
+  display: flex;
+  gap: 0px 2vw;
+  justify-content: space-between;
+  width: 100%;
+  height: 120px;
+  left: 0px;
+  top: 0px;
+  align-items: center;
+  padding: 0px 20px;
+  position: relative;
+  background: #313132;
+  box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
+  z-index: 10000;
 }
 
 .active {
-    color: #7ED957 !important;
+  color: #7ed957 !important;
 }
 
 .icon {
-    width: 168px;
-    height: 61px;
+  height: 90px;
+}
+
+.icontext {
+  font-family: "SFNSRounded";
+  font-size: 38px;
+  text-align: center;
+  display: inline;
+  position: relative;
+  vertical-align: middle;
+}
+
+.linkbox {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  vertical-align: bottom;
+}
+
+.searchbarbox {
+  flex-grow: 2;
 }
 
 .searchbar {
-    width: 618px;
-    height: 43px;
-    left: 864px;
-    top: 47px;
-    background-color: #313132;
-    border-style: solid;
-    border-width: 1px;
-    border-radius: 2px;
-    border-color: #4d4d4d;
-    color:#FFFFFF;
-    outline: none;
-    font-family: 'Inter';
-    font-style: normal;
-    font-weight: 400;
-    font-size: 16px;
-    transition: 100ms ease;
-    padding-left: 10px;
+  width: 100%;
+  height: 43px;
+  top: 47px;
+  background-color: #313132;
+  border-style: solid;
+  border-width: 1px;
+  border-radius: 2px;
+  border-color: #4d4d4d;
+  color: #ffffff;
+  outline: none;
+  font-family: "SFNSRounded";
+  font-size: 16px;
+  transition: 100ms ease;
+  padding-left: 10px;
 }
 
 .searchbar:focus {
-    border-color: #7ED957 !important;
-
+  border-color: #7ed957 !important;
 }
 
 .searchbar::placeholder {
-    color:#FFFFFF;
-    font-family: 'Inter';
-    font-style: normal;
-    font-weight: 400;
+  color: #ffffff;
+  font-family: "SFNSRounded";
+  font-style: normal;
+  font-weight: 400;
 }
 
 .search_results {
-    background-color: #1a1a1a;
-    width: 618px;
-    right: 20px;
-    top: 100px;
-    position: absolute;
-    border: 1px solid #323232;
+  background-color: #1a1a1a;
+  width: 618px;
+  position: absolute;
+  border: 1px solid #323232;
 }
 
 .search_results > button {
-    width: 100%;
-    display: inline-block;
-    padding: 10px 20px;
-    cursor: pointer;
-    border: none;
-    border-bottom: 1px solid #7ED957;
-    color: white;
-    text-align: left;
-    background-color: transparent;
+  width: 100%;
+  display: inline-block;
+  padding: 10px 20px;
+  cursor: pointer;
+  border: none;
+  border-bottom: 1px solid #7ed957;
+  color: white;
+  text-align: left;
+  background-color: transparent;
 }
 
 .search_results > button > img {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    margin-right: 20px;
-    vertical-align: middle;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  margin-right: 20px;
+  vertical-align: middle;
 }
 
 .search_results > button > span {
-    vertical-align: middle;
+  vertical-align: middle;
 }
 
 .search_results > button:hover {
-    background-color: #323232 !important;
+  background-color: #323232 !important;
 }
 
 .search_results > button:last-of-type {
-    border-bottom: none;
+  border-bottom: none;
+}
+
+@media screen and (max-width: 600px) {
+  div.icontext {
+    display: none;
+  }
+}
+
+.notifBox {
+  position: fixed;
+  display: block;
+  top: 120px;
+  right: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.notifBody {
+  position: fixed;
+  right: 0;
+  top: 120px;
+  height: calc(100% - 120px);
+  overflow-y: scroll;
+}
+
+.notifBody::-webkit-scrollbar {
+  display: none;
 }
