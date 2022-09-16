@@ -419,6 +419,8 @@ export async function getServerSideProps(context) {
     baseUrl = process.env.API_BASE_URL;
   } else if (chain == "Rinkeby") {
     baseUrl = process.env.API_TEST_URL;
+  } else if (chain == "Goerli") {
+    baseUrl = process.env.API_GOERLI_URL;
   }
 
   return {

@@ -9,10 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@emotion/react": "^11.10.0",
-    "@emotion/styled": "^11.10.0",
     "@epnsproject/backend-sdk-staging": "^2.0.3",
-    "@epnsproject/frontend-sdk-staging": "^1.8.5",
+    "@flashbots/ethers-provider-bundle": "^0.5.0",
     "@rainbow-me/rainbowkit": "^0.4.5",
     "bootstrap": "^5.2.0",
     "concurrently": "^7.3.0",
@@ -24,9 +22,6 @@
     "pg": "^8.7.3",
     "quirrel": "^1.9.3",
     "react": "^18.2.0",
-    "react-bootstrap": "^2.5.0",
-    "react-dom": "^18.2.0",
-    "react-infinite-scroll-component": "^6.1.0",
     "wagmi": "^0.6.0"
   }
 }

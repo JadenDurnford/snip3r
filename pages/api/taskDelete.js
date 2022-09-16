@@ -17,7 +17,7 @@ export default async (req, res) => {
   const id = req.body;
 
   await listedTokenCheck.delete(id);
-  await client.query(`DELETE FROM snip3r.snipe_tracking WHERE id= '${id}'`);
+  await client.query(`DELETE FROM snipe_tracking WHERE id= '${id}'`);
   console.log("notifications stopped");
   client.end();
   res.end();

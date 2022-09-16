@@ -12,7 +12,7 @@ import { publicProvider } from "wagmi/providers/public";
 import Head from "next/head";
 
 const { chains, provider } = configureChains(
-  [chain.mainnet, chain.rinkeby],
+  [chain.mainnet, chain.rinkeby, chain.goerli],
   [
     alchemyProvider({ alchemyId: process.env.ALCHEMY_MAINNET }),
     publicProvider(),

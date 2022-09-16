@@ -4,6 +4,10 @@ import tokenListedNotif from "./tokenListed";
 import { Client } from "pg";
 import EpnsSDK from "@epnsproject/backend-sdk-staging";
 import { ethers } from "ethers";
+import {
+  FlashbotsBundleProvider,
+  FlashbotsTransactionResolution,
+} from "@flashbots/ethers-provider-bundle";
 
 export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   const client = new Client({
@@ -36,6 +40,9 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   } else if (chain == "Rinkeby") {
     reservoirUrl = "api-rinkeby.reservoir.tools";
     alchemyUrl = `https://eth-rinkeby.alchemyapi.io/v2/${process.env.ALCHEMY_TESTNET}`;
+  } else if (chain == "Goerli") {
+    reservoirUrl = "api-goerli.reservoir.tools";
+    alchemyUrl = `https://eth-goerli.g.alchemy.com/v2/${process.env.ALCHEMY_GOERLI}`;
   }
   const {
     data: { collection },
@@ -78,7 +85,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
   if (image == null) {
     image = "";
   }
-
+  /*
   const tx = await epnsSdk.sendNotification(
     notifData.address,
     pushNotificationtitle,
@@ -91,7 +98,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
     null //this can be left as null
   );
 
-  console.log(tx);
+  console.log(tx); */
 
   const unixTime = Date.now() / 1000;
 
@@ -120,7 +127,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
 
     var uniqueTokens = [...new Set(orderIds)];
     var fulfilledIds = await client.query(
-      `SELECT fulfilled_ids FROM snip3r.snipe_tracking WHERE id= '${id}'`
+      `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
     );
 
     var idArray;
@@ -214,19 +221,175 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
             notifData.price &&
           events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price != null
         ) {
-          const connection = new ethers.providers.JsonRpcProvider(
+          /*const provider = new ethers.providers.JsonRpcProvider(
             `${alchemyUrl}`
           );
 
           const wallet = new ethers.Wallet(process.env.SNIPE_PK);
-          const signer = wallet.connect(connection);
+          const signer = wallet.connect(provider);
+          const flashbotsProvider = await FlashbotsBundleProvider.create(provider, signer);
+          */
+          const provider = new ethers.providers.AlchemyProvider(
+            "goerli",
+            process.env.ALCHEMY_GOERLI
+          );
+
+          const authSigner = new ethers.Wallet(
+            "0x2000000000000000000000000000000000000000000000000000000000000000",
+            provider
+          );
+          const wallet = new ethers.Wallet(process.env.SNIPE_PK);
+          const signer = wallet.connect(provider);
+
+          const flashbotsProvider = await FlashbotsBundleProvider.create(
+            provider,
+            authSigner,
+            "https://relay-goerli.flashbots.net",
+            "goerli"
+          );
           try {
+            await axios
+              .post(`https://${reservoirUrl}/execute/buy/v4`, {
+                "tokens": [`${contractAddress}:${uniqueTokens[i]}`],
+                "feesOnTop": ["0xFf14BA529d203823F4B6d4a7F23c1568333AE60b:250"],
+                "taker": `${walletAddress}`,
+              })
+              .then(async function (res) {
+                try {
+                  var tx = res.data.steps[1].items[0].data;
+                  tx["from"] = `${wallet.address}`;
+                  tx["maxPriorityFeePerGas"] =
+                    ethers.BigNumber.from("0xB2D05E00");
+                  tx["maxFeePerGas"] = ethers.BigNumber.from("0xB2D05E10");
+                  const completeTx = await signer.populateTransaction(tx);
+
+                  const signedTransactions = await flashbotsProvider.signBundle(
+                    [
+                      {
+                        signer: signer,
+                        transaction: completeTx,
+                      },
+                    ]
+                  );
+
+                  const blockNumber = await provider.getBlockNumber();
+
+                  console.log(new Date());
+                  const simulation = await flashbotsProvider.simulate(
+                    signedTransactions,
+                    blockNumber + 1
+                  );
+                  console.log(new Date());
+
+                  // Using TypeScript discrimination
+                  if ("error" in simulation) {
+                    console.log(
+                      `Simulation Error: ${simulation.error.message}`
+                    );
+                  } else {
+                    console.log(
+                      `Simulation Success: ${blockNumber} ${JSON.stringify(
+                        simulation,
+                        null,
+                        2
+                      )}`
+                    );
+                  }
+                  console.log(signedTransactions);
+
+                  for (var j = 1; j <= 25; j++) {
+                    const bundleSubmission =
+                      await flashbotsProvider.sendRawBundle(
+                        signedTransactions,
+                        blockNumber + j
+                      );
+                    console.log("submitted for block # ", blockNumber + j);
+                  }
+                  console.log("bundles submitted");
+
+                  /*
+                  const result = await flashbotsProvider.sendPrivateTransaction(
+                    {
+                      transaction: completeTx,
+                      signer: wallet,
+                    },
+                    {
+                      maxBlockNumber: (await provider.getBlockNumber()) + 5, // only allow tx to be mined for the next 5 blocks
+                    }
+                  );
+
+                  const waitRes = await result.wait();
+                  if (
+                    waitRes ===
+                    FlashbotsTransactionResolution.TransactionIncluded
+                  ) {
+                    console.log("Private transaction successfully mined.");
+                  } else if (
+                    waitRes ===
+                    FlashbotsTransactionResolution.TransactionDropped
+                  ) {
+                    console.log(
+                      "Private transaction was not mined and has been removed from the system."
+                    );
+                  }
+                  /*
+              const transaction = await signer.sendTransaction(tx);
+              console.log(transaction);
+              const success = await transaction.wait(6);
+              console.log(success); */
+                  var {
+                    data: { tokens },
+                  } = await axios.get(
+                    `https://${reservoirUrl}/tokens/v4?tokens=${contractAddress}%3A${uniqueTokens[i]}`
+                  );
+                  var tokenPkg = tokens[0];
+                  tokenPkg.address = notifData.address;
+                  tokenPkg.price =
+                    events[orderIds.indexOf(uniqueTokens[i])].floorAsk.price;
+                  await tokenListedNotif.enqueue(tokenPkg);
+
+                  var filledIds = await client.query(
+                    `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
+                  );
+                  var newIds;
+                  if (filledIds.rows[0].fulfilled_ids != null) {
+                    newIds = filledIds.rows[0].fulfilled_ids.concat(
+                      ",",
+                      uniqueTokens[i]
+                    );
+                  } else {
+                    newIds = uniqueTokens[i];
+                  }
+                  await client.query(
+                    `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
+                  );
+                  var quant = await client.query(
+                    `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
+                  );
+                  var count = quant.rows[0].quantity + 1;
+                  await client.query(
+                    `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
+                  );
+                  if (count >= parseInt(notifData.quantity)) {
+                    console.log(
+                      "adequate snipes fulfilled, terminating process"
+                    );
+                    client.end();
+                    taskDelete();
+                    return resolve;
+                  }
+                } catch (error) {
+                  console.log(error);
+                }
+              });
+            /*
             const {
               data: { steps },
             } = await axios.get(
               `https://${reservoirUrl}/execute/buy/v2?token=${contractAddress}%3A${uniqueTokens[i]}&taker=${walletAddress}&onlyQuote=false&referrer=0xFf14BA529d203823F4B6d4a7F23c1568333AE60b&referrerFeeBps=250&source=reservoir.market&partial=false&skipBalanceCheck=true`
             );
             var tx = steps[0].data;
+            console.log(tx);
             tx["from"] = `${wallet.address}`;
             try {
               const transaction = await signer.sendTransaction(tx);
@@ -246,7 +409,7 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
               await tokenListedNotif.enqueue(tokenPkg);
 
               var filledIds = await client.query(
-                `SELECT fulfilled_ids FROM snip3r.snipe_tracking WHERE id= '${id}'`
+                `SELECT fulfilled_ids FROM snipe_tracking WHERE id= '${id}'`
               );
               var newIds;
               if (filledIds.rows[0].fulfilled_ids != null) {
@@ -258,14 +421,14 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
                 newIds = uniqueTokens[i];
               }
               await client.query(
-                `UPDATE snip3r.snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
+                `UPDATE snipe_tracking SET fulfilled_ids = '${newIds}' WHERE id = '${id}'`
               );
               var quant = await client.query(
-                `SELECT quantity FROM snip3r.snipe_tracking WHERE id= '${id}'`
+                `SELECT quantity FROM snipe_tracking WHERE id= '${id}'`
               );
               var count = quant.rows[0].quantity + 1;
               await client.query(
-                `UPDATE snip3r.snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
+                `UPDATE snipe_tracking SET quantity = ${count} WHERE id = '${id}'`
               );
               if (count >= parseInt(notifData.quantity)) {
                 console.log("adequate snipes fulfilled, terminating process");
@@ -275,14 +438,14 @@ export default Queue("api/queues/listedTokenCheck", async (notifData) => {
               }
             } catch (error) {
               console.log(error);
-            }
+            } */
           } catch (err) {
             console.log("no data");
           }
         }
       }
     }
-    setTimeout(apiPoll, 1000, resolve, reject);
+    setTimeout(apiPoll, 500, resolve, reject);
   };
 
   return new Promise(apiPoll);

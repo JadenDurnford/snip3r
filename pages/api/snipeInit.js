@@ -19,7 +19,7 @@ export default async (req, res) => {
   var customId = `${body.address}` + ":" + `${body.contract}`;
 
   await client.query(
-    `INSERT INTO snip3r.snipe_tracking (id, quantity) VALUES ('${customId}', 0)`
+    `INSERT INTO snipe_tracking (id, quantity) VALUES ('${customId}', 0)`
   );
 
   await listedTokenCheckQueue.enqueue(body, {

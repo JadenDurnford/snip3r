@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useNetwork } from "wagmi";
-import {
+/*import {
   api,
   utils,
   NotificationItem,
@@ -13,19 +13,20 @@ import Button from "react-bootstrap/Button";
 import Col from "react-bootstrap/Col";
 import Container from "react-bootstrap/Container";
 import Modal from "react-bootstrap/Modal";
-import Row from "react-bootstrap/Row";
+import Row from "react-bootstrap/Row"; */
 
 export default function Layout(props) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [results, setResults] = useState([]);
   const [show, setShow] = useState(false);
-  const handleClose = () => setShow(false);
-  const handleShow = () => setShow(true);
-  const [notifs, setNotifs] = useState([]);
   const { chain } = useNetwork();
   const walletAddress = useAccount().address;
 
+  /*
+  const handleClose = () => setShow(false);
+  const handleShow = () => setShow(true);
+  const [notifs, setNotifs] = useState([]);
   useEffect(() => {
     if (walletAddress) {
       const fetchNotifs = async () => {
@@ -44,7 +45,7 @@ export default function Layout(props) {
       fetchNotifs();
     }
   }, [show]);
-
+  */
   useEffect(() => {
     if (!chain) {
       document.getElementById("searchbar").disabled = true;
@@ -107,35 +108,6 @@ export default function Layout(props) {
               })}
             </div>
           )}
-        </div>
-        <div>
-          <Button variant="primary" onClick={handleShow}>
-            🔔
-          </Button>
-          <Modal
-            show={show}
-            onHide={handleClose}
-            className={styles.notifBox}
-            scrollable
-          >
-            <Modal.Body className={styles.notifBody}>
-              <Container>
-                {notifs.map((oneNotification) => (
-                  <Row>
-                    <NotificationItem
-                      notificationTitle={oneNotification.title}
-                      notificationBody={oneNotification.message}
-                      cta={oneNotification.cta}
-                      app={oneNotification.app}
-                      icon={oneNotification.icon}
-                      image={oneNotification.image}
-                      url={oneNotification.url}
-                    />
-                  </Row>
-                ))}
-              </Container>
-            </Modal.Body>
-          </Modal>
         </div>
         <ConnectButton
           chainStatus={{
